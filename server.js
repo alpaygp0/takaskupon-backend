@@ -93,23 +93,29 @@ app.use((err, req, res, next) => {
 // ==========================================
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log('✅ MongoDB Veritabanına Başarıyla Bağlanıldı!');
-        
-        app.listen(PORT, () => {
-            console.log(`🚀 Takas-App Motoru ${PORT} portunda çalışıyor!`);
+// 1. Önce Render için kapıları açıyoruz (Timeout hatasını önler)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Takas-App Motoru ${PORT} portunda çalışıyor!`);
+    
+    // 2. Sunucu ayaklandıktan sonra Veritabanına bağlanıyoruz
+    if (!process.env.MONGO_URI) {
+        console.error("❌ DİKKAT: MONGO_URI şifresi bulunamadı!");
+        return;
+    }
+
+    mongoose.connect(process.env.MONGO_URI)
+        .then(() => {
+            console.log('✅ MongoDB Veritabanına Başarıyla Bağlanıldı!');
             
-            // Temizlik robotunu veritabanı bağlandıktan sonra güvenle başlat
+            // Temizlik robotunu başlat
             try {
                 const startCronJobs = require('./utils/cronJobs');
                 startCronJobs();
             } catch (error) {
                 console.log("ℹ️ CronJob modülü bulunamadı, bu adım atlanıyor.");
             }
+        })
+        .catch((error) => {
+            console.error('❌ MongoDB Bağlantı Hatası:', error.message);
         });
-    })
-    .catch((error) => {
-        console.error('❌ MongoDB Bağlantı Hatası:', error.message);
-        process.exit(1); 
-    });
+});
