@@ -1,6 +1,3 @@
-// ==========================================
-// 1. MODÜLLER VE YAPILANDIRMA
-// ==========================================
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -11,26 +8,21 @@ const { Server } = require('socket.io');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-// .env dosyasını yükle
+// 1. ÇEVRE DEĞİŞKENLERİNİ YÜKLE
 dotenv.config();
 
-// ==========================================
-// 2. UYGULAMA VE SERVER BAŞLATMA
-// ==========================================
+// 2. EXPRESS VE HTTP SERVER BAŞLATMA
 const app = express();
-const server = http. Rios.createServer(app); // Socket.io için http server gerekli
+const server = http.createServer(app);
 
-// ==========================================
-// 3. GÜVENLİK AYARLARI (HELMET & CORS)
-// ==========================================
-
-// Helmet: Güvenlik başlıklarını ayarlar (Vercel/Google Auth uyumlu hali)
+// 3. GÜVENLİK (HELMET & CORS)
+// Helmet ayarlarını Vercel ve Google Auth ile uyumlu hale getiriyoruz
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: false, // Google Auth ve harici scriptlerin çalışması için
+    contentSecurityPolicy: false, 
 }));
 
-// CORS: Vercel'den gelen isteklere izin ver
+// CORS: Vercel adresine tam yetki veriyoruz
 app.use(cors({
     origin: ['https://takaskupon-frontend.vercel.app', 'https://takaskupon-frontend-alpaygp0.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -40,47 +32,35 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ==========================================
-// 4. SOCKET.IO AYARLARI (REAL-TIME)
-// ==========================================
+// 4. SOCKET.IO MOTORU (Hata Veren Kısım Burasıydı)
 const io = new Server(server, {
     cors: {
-        origin: ['https://takaskupon-frontend.vercel.app'],
+        origin: 'https://takaskupon-frontend.vercel.app',
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    allowEIO3: true,
+    path: '/socket.io/' // Vercel'in dosyayı bulabilmesi için yolu netleştiriyoruz
 });
 
-// Socket bağlantı yönetimi
 io.on('connection', (socket) => {
     console.log('📡 Bir kullanıcı bağlandı:', socket.id);
-    
     socket.on('register', (userId) => {
         socket.join(userId);
-        console.log(`👤 Kullanıcı odasına katıldı: ${userId}`);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('❌ Kullanıcı ayrıldı');
     });
 });
 
-// io nesnesini route'larda kullanabilmek için app'e ekle
 app.set('socketio', io);
 
-// ==========================================
 // 5. HIZ SINIRLANDIRMA (RATE LIMIT)
-// ==========================================
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
-    message: { message: "Çok fazla istek attınız, lütfen biraz dinlenin." }
+    message: { message: "Çok fazla istek attınız." }
 });
 app.use(generalLimiter);
 
-// ==========================================
-// 6. ROTALAR VE STATİK DOSYALAR
-// ==========================================
+// 6. ROTALAR
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const authRoutes = require('./routes/authRoutes');
@@ -91,22 +71,18 @@ app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Canlılık Kontrolü (Health Check)
+// Sağlık Kontrolü
 app.get('/', (req, res) => {
     res.json({ success: true, message: "🚀 TakasKupon API Motoru Yayında!" });
 });
 
-// ==========================================
 // 7. HATA YAKALAYICI
-// ==========================================
 app.use((err, req, res, next) => {
     console.error("🚨 Sunucu Hatası:", err.message);
-    res.status(500).json({ success: false, message: 'Sunucu tarafında bir hata oluştu.' });
+    res.status(500).json({ success: false, message: 'Sunucu hatası.' });
 });
 
-// ==========================================
 // 8. VERİTABANI VE BAŞLATMA
-// ==========================================
 const PORT = process.env.PORT || 10000;
 
 server.listen(PORT, '0.0.0.0', () => {
@@ -116,8 +92,6 @@ server.listen(PORT, '0.0.0.0', () => {
         mongoose.connect(process.env.MONGO_URI)
             .then(() => {
                 console.log('✅ MongoDB Bağlantısı Başarılı!');
-                
-                // CronJob'ları başlat (Eğer varsa)
                 try {
                     const startCronJobs = require('./utils/cronJobs');
                     startCronJobs();
