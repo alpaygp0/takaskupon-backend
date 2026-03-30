@@ -24,15 +24,11 @@ app.use(helmet()); // Kalkanı giydir
 app.use(express.json()); // Gelen JSON verilerini oku
 app.use(express.urlencoded({ extended: true }));
 
-// CORS Ayarı (Şimdilik Vercel'i kurana kadar herkese açık)
 app.use(cors({
-    origin: function (origin, callback) {
-        callback(null, true); // Gelen tüm origin'leri kabul et
-    },
+    origin: ['https://takaskupon-frontend.vercel.app'], // Sadece senin Vercel linkin
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true 
 }));
-
 // ==========================================
 // 4. DDoS VE BRUTE FORCE KORUMASI (Rate Limiter)
 // ==========================================
