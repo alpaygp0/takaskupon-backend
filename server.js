@@ -1,61 +1,88 @@
 // ==========================================
-// 1. GEREKLİ PAKETLER (Sadece birer kez çağrılır)
+// 1. MODÜLLER VE YAPILANDIRMA
 // ==========================================
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
-const rateLimit = require('express-rate-limit');
+const http = require('http');
+const { Server } = require('socket.io');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
-// Çevre değişkenlerini (.env) yükle
+// .env dosyasını yükle
 dotenv.config();
 
 // ==========================================
-// 2. UYGULAMAYI OLUŞTUR (Temel Atma)
+// 2. UYGULAMA VE SERVER BAŞLATMA
 // ==========================================
 const app = express();
+const server = http. Rios.createServer(app); // Socket.io için http server gerekli
 
 // ==========================================
-// 3. GÜVENLİK VE ARA KATMANLAR (Sıralama Önemlidir)
+// 3. GÜVENLİK AYARLARI (HELMET & CORS)
 // ==========================================
-app.use(helmet()); // Kalkanı giydir
-app.use(express.json()); // Gelen JSON verilerini oku
+
+// Helmet: Güvenlik başlıklarını ayarlar (Vercel/Google Auth uyumlu hali)
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // Google Auth ve harici scriptlerin çalışması için
+}));
+
+// CORS: Vercel'den gelen isteklere izin ver
+app.use(cors({
+    origin: ['https://takaskupon-frontend.vercel.app', 'https://takaskupon-frontend-alpaygp0.vercel.app'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+}));
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(cors({
-    origin: ['https://takaskupon-frontend.vercel.app'], // Sadece senin Vercel linkin
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true 
-}));
 // ==========================================
-// 4. DDoS VE BRUTE FORCE KORUMASI (Rate Limiter)
+// 4. SOCKET.IO AYARLARI (REAL-TIME)
+// ==========================================
+const io = new Server(server, {
+    cors: {
+        origin: ['https://takaskupon-frontend.vercel.app'],
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+// Socket bağlantı yönetimi
+io.on('connection', (socket) => {
+    console.log('📡 Bir kullanıcı bağlandı:', socket.id);
+    
+    socket.on('register', (userId) => {
+        socket.join(userId);
+        console.log(`👤 Kullanıcı odasına katıldı: ${userId}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('❌ Kullanıcı ayrıldı');
+    });
+});
+
+// io nesnesini route'larda kullanabilmek için app'e ekle
+app.set('socketio', io);
+
+// ==========================================
+// 5. HIZ SINIRLANDIRMA (RATE LIMIT)
 // ==========================================
 const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 200, 
+    windowMs: 15 * 60 * 1000,
+    max: 200,
     message: { message: "Çok fazla istek attınız, lütfen biraz dinlenin." }
 });
 app.use(generalLimiter);
 
-const authLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 saat
-    max: 10, 
-    message: { message: "Çok fazla başarısız deneme yaptınız. Güvenliğiniz için bu işlem 1 saatliğine kilitlendi." }
-});
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/forgot-password', authLimiter);
-app.use('/api/auth/register', authLimiter);
-
 // ==========================================
-// 5. YÜKLENEN GÖRSELLERİ DIŞARI AÇMA
+// 6. ROTALAR VE STATİK DOSYALAR
 // ==========================================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ==========================================
-// 6. API ROTALARI (Uç Noktalar)
-// ==========================================
 const authRoutes = require('./routes/authRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
 const aiRoutes = require('./routes/aiRoutes');
@@ -64,54 +91,40 @@ app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Render'da linke tıklandığında uygulamanın çalıştığını gösteren test mesajı
+// Canlılık Kontrolü (Health Check)
 app.get('/', (req, res) => {
-    res.json({ 
-        success: true, 
-        message: "🚀 TakasKupon API Motoru Tıkır Tıkır Çalışıyor!" 
-    });
+    res.json({ success: true, message: "🚀 TakasKupon API Motoru Yayında!" });
 });
 
 // ==========================================
-// 7. GLOBAL HATA YAKALAYICI
+// 7. HATA YAKALAYICI
 // ==========================================
 app.use((err, req, res, next) => {
-    console.error("🚨 Sunucu Hatası Yakalandı:", err.message);
-    res.status(500).json({ 
-        success: false, 
-        message: 'İşlem sırasında bir hata oluştu.', 
-        error: err.message 
-    });
+    console.error("🚨 Sunucu Hatası:", err.message);
+    res.status(500).json({ success: false, message: 'Sunucu tarafında bir hata oluştu.' });
 });
 
 // ==========================================
-// 8. VERİTABANI BAĞLANTISI VE MOTORU ATEŞLEME
+// 8. VERİTABANI VE BAŞLATMA
 // ==========================================
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// 1. Önce Render için kapıları açıyoruz (Timeout hatasını önler)
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Takas-App Motoru ${PORT} portunda çalışıyor!`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Sunucu ${PORT} portunda aktif!`);
     
-    // 2. Sunucu ayaklandıktan sonra Veritabanına bağlanıyoruz
-    if (!process.env.MONGO_URI) {
-        console.error("❌ DİKKAT: MONGO_URI şifresi bulunamadı!");
-        return;
+    if (process.env.MONGO_URI) {
+        mongoose.connect(process.env.MONGO_URI)
+            .then(() => {
+                console.log('✅ MongoDB Bağlantısı Başarılı!');
+                
+                // CronJob'ları başlat (Eğer varsa)
+                try {
+                    const startCronJobs = require('./utils/cronJobs');
+                    startCronJobs();
+                } catch (e) {
+                    console.log("ℹ️ CronJob modülü aktif değil.");
+                }
+            })
+            .catch(err => console.error('❌ MongoDB Hatası:', err.message));
     }
-
-    mongoose.connect(process.env.MONGO_URI)
-        .then(() => {
-            console.log('✅ MongoDB Veritabanına Başarıyla Bağlanıldı!');
-            
-            // Temizlik robotunu başlat
-            try {
-                const startCronJobs = require('./utils/cronJobs');
-                startCronJobs();
-            } catch (error) {
-                console.log("ℹ️ CronJob modülü bulunamadı, bu adım atlanıyor.");
-            }
-        })
-        .catch((error) => {
-            console.error('❌ MongoDB Bağlantı Hatası:', error.message);
-        });
 });
