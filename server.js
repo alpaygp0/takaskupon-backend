@@ -91,20 +91,8 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Sunucu ${PORT} portunda aktif!`);
     
     if (process.env.MONGO_URI) {
-        // İŞTE SİHİRLİ DOKUNUŞ BURASI (family: 4 eklendi)
-        mongoose.connect(process.env.MONGO_URI, {
-            serverSelectionTimeoutMS: 5000, // 5 saniyede cevap alamazsa hatayı bas
-            family: 4 // ZORUNLU: Node.js'i IPv4 kullanmaya zorla (Atlas uyuşmazlığını çözer)
-        })
-            .then(() => {
-                console.log('✅ MongoDB Bağlantısı Başarılı!');
-                try {
-                    const startCronJobs = require('./utils/cronJobs');
-                    startCronJobs();
-                } catch (e) {
-                    console.log("ℹ️ CronJob modülü aktif değil.");
-                }
-            })
-            .catch(err => console.error('❌ MongoDB Hatası:', err.message));
-    }
+    mongoose.connect(process.env.MONGO_URI)
+        .then(() => console.log('✅ MongoDB Bağlantısı Başarılı!'))
+        .catch(err => console.error('❌ MongoDB Hatası:', err.message));
+}
 });
