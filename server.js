@@ -82,14 +82,20 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, message: 'Sunucu hatası.' });
 });
 
+// ==========================================
 // 8. VERİTABANI VE BAŞLATMA
+// ==========================================
 const PORT = process.env.PORT || 10000;
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Sunucu ${PORT} portunda aktif!`);
     
     if (process.env.MONGO_URI) {
-        mongoose.connect(process.env.MONGO_URI)
+        // İŞTE SİHİRLİ DOKUNUŞ BURASI (family: 4 eklendi)
+        mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 5000, // 5 saniyede cevap alamazsa hatayı bas
+            family: 4 // ZORUNLU: Node.js'i IPv4 kullanmaya zorla (Atlas uyuşmazlığını çözer)
+        })
             .then(() => {
                 console.log('✅ MongoDB Bağlantısı Başarılı!');
                 try {
